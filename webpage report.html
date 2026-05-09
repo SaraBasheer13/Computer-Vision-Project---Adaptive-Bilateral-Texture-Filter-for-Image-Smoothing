@@ -1,0 +1,1168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Adaptive Bilateral Texture Filter — CSE 429 E-JUST</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=JetBrains+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.min.js"></script>
+<style>
+:root {
+  --bg: #07090f;
+  --surface: #0e1117;
+  --surface2: #141923;
+  --surface3: #1a2235;
+  --border: #1e2d45;
+  --border2: #243550;
+  --accent: #3b82f6;
+  --accent-glow: rgba(59,130,246,0.15);
+  --accent2: #06b6d4;
+  --accent3: #8b5cf6;
+  --accent4: #10b981;
+  --red: #8b1a1a;
+  --text: #cbd5e1;
+  --text2: #94a3b8;
+  --bright: #f1f5f9;
+  --mono: 'JetBrains Mono', monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Outfit', sans-serif;
+  font-weight: 400;
+  line-height: 1.7;
+  overflow-x: hidden;
+}
+
+/* Background */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 10%, rgba(59,130,246,0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, rgba(139,92,246,0.05) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* === NAV SIDEBAR === */
+nav {
+  position: fixed;
+  left: 0; top: 0; bottom: 0;
+  width: 240px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  z-index: 100;
+  overflow-y: auto;
+  padding: 28px 0 28px;
+  display: flex;
+  flex-direction: column;
+}
+
+.nav-logo {
+  padding: 0 20px 24px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.nav-logo .course { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--accent2); font-weight: 600; }
+.nav-logo .title { font-size: 13px; font-weight: 600; color: var(--bright); margin-top: 4px; line-height: 1.4; }
+
+nav a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 20px;
+  font-size: 12.5px;
+  color: var(--text2);
+  text-decoration: none;
+  transition: all 0.15s;
+  border-left: 2px solid transparent;
+  font-weight: 500;
+}
+nav a:hover, nav a.active {
+  color: var(--accent);
+  background: var(--accent-glow);
+  border-left-color: var(--accent);
+}
+nav a .num {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--border2);
+  width: 20px;
+  flex-shrink: 0;
+}
+nav a:hover .num, nav a.active .num { color: var(--accent); }
+
+/* === MAIN CONTENT === */
+main {
+  margin-left: 240px;
+  position: relative;
+  z-index: 1;
+}
+
+/* === HERO === */
+.hero {
+  padding: 80px 64px 60px;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+.hero::after {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 500px; height: 100%;
+  background: radial-gradient(ellipse at right top, rgba(59,130,246,0.08), transparent 70%);
+  pointer-events: none;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(59,130,246,0.1);
+  border: 1px solid rgba(59,130,246,0.3);
+  border-radius: 100px;
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 28px;
+}
+
+.hero h1 {
+  font-family: 'DM Serif Display', serif;
+  font-size: clamp(2.2rem, 4vw, 3.6rem);
+  color: var(--bright);
+  line-height: 1.1;
+  margin-bottom: 12px;
+}
+.hero h1 em { font-style: italic; color: var(--accent2); }
+
+.hero-sub {
+  font-size: 16px;
+  color: var(--text2);
+  margin-bottom: 40px;
+}
+
+.hero-ref {
+  display: inline-block;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 13px;
+  color: var(--text2);
+  margin-bottom: 40px;
+}
+.hero-ref strong { color: var(--accent3); }
+
+.authors-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+  max-width: 860px;
+  margin-bottom: 32px;
+}
+
+.author-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  transition: border-color 0.2s;
+}
+.author-card:hover { border-color: var(--accent); }
+.author-card .name { font-size: 13px; font-weight: 600; color: var(--bright); }
+.author-card .id { font-family: var(--mono); font-size: 11px; color: var(--accent); margin-top: 3px; }
+
+.meta-strip {
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--text2);
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+}
+.meta-strip span strong { color: var(--text); }
+
+/* === SECTIONS === */
+section {
+  padding: 56px 64px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 32px;
+}
+
+.section-num {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+  background: rgba(59,130,246,0.1);
+  border: 1px solid rgba(59,130,246,0.25);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.section-header h2 {
+  font-family: 'DM Serif Display', serif;
+  font-size: 1.9rem;
+  color: var(--bright);
+  line-height: 1.2;
+}
+
+p { font-size: 15px; color: var(--text); margin-bottom: 16px; line-height: 1.8; }
+
+/* === CALLOUT BOXES === */
+.callout {
+  border-radius: 12px;
+  padding: 18px 22px;
+  margin: 20px 0;
+  border-left: 3px solid;
+}
+.callout.blue  { background: rgba(59,130,246,0.07);  border-color: var(--accent);  }
+.callout.cyan  { background: rgba(6,182,212,0.07);   border-color: var(--accent2); }
+.callout.purple{ background: rgba(139,92,246,0.07);  border-color: var(--accent3); }
+.callout.green { background: rgba(16,185,129,0.07);  border-color: var(--accent4); }
+.callout-title { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
+.callout.blue  .callout-title { color: var(--accent); }
+.callout.cyan  .callout-title { color: var(--accent2); }
+.callout.purple .callout-title { color: var(--accent3); }
+.callout.green .callout-title { color: var(--accent4); }
+.callout p { margin: 0; font-size: 14px; }
+
+/* === MATH BLOCK === */
+.math-block {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px 32px;
+  margin: 20px 0;
+  text-align: center;
+  overflow-x: auto;
+  position: relative;
+}
+.math-block .math-label {
+  position: absolute;
+  top: 10px; right: 14px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--border2);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.math-block .MathJax { font-size: 1.2em !important; }
+
+/* === PIPELINE === */
+.pipeline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 2px;
+  background: var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  margin: 24px 0;
+}
+
+.pipe-step {
+  background: var(--surface);
+  padding: 22px 20px;
+  position: relative;
+  transition: background 0.2s;
+}
+.pipe-step:hover { background: var(--surface2); }
+
+.pipe-step .step-n {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--accent);
+  font-weight: 500;
+  margin-bottom: 10px;
+  letter-spacing: 0.08em;
+}
+.pipe-step .step-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--bright);
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+.pipe-step .step-desc {
+  font-size: 12.5px;
+  color: var(--text2);
+  line-height: 1.5;
+}
+
+.pipe-step::after {
+  content: '→';
+  position: absolute;
+  right: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--border2);
+  font-size: 16px;
+  z-index: 2;
+}
+.pipe-step:last-child::after { display: none; }
+
+/* === TWO COLUMN === */
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 20px 0;
+}
+
+.info-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  transition: border-color 0.2s;
+}
+.info-card:hover { border-color: var(--border2); }
+.info-card .card-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.info-card .card-body { font-size: 13.5px; color: var(--text2); line-height: 1.6; }
+.info-card.high .card-title { color: var(--accent2); }
+.info-card.low  .card-title { color: var(--accent3); }
+.info-card.tex  .card-title { color: var(--accent4); }
+.info-card.edge .card-title { color: var(--accent); }
+
+/* === BULLET LIST === */
+ul.tech-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0;
+}
+ul.tech-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14.5px;
+  color: var(--text);
+}
+ul.tech-list li::before {
+  content: '▸';
+  color: var(--accent);
+  flex-shrink: 0;
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+/* === METRICS GRID === */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  margin: 24px 0;
+}
+.metric-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 14px;
+  text-align: center;
+  transition: all 0.2s;
+}
+.metric-card:hover { border-color: var(--accent3); transform: translateY(-2px); }
+.metric-card .mname {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--accent3);
+  margin-bottom: 6px;
+}
+.metric-card .mdesc { font-size: 11.5px; color: var(--text2); line-height: 1.4; }
+
+/* === TECH TAGS === */
+.tags { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+.tag {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+.tag.py  { background: rgba(59,130,246,0.12); color: var(--accent);  border: 1px solid rgba(59,130,246,0.25); }
+.tag.lib { background: rgba(16,185,129,0.1);  color: var(--accent4); border: 1px solid rgba(16,185,129,0.25); }
+.tag.eta { background: rgba(139,92,246,0.12); color: var(--accent3); border: 1px solid rgba(139,92,246,0.25); }
+
+/* === WINDOW SIZE ROW === */
+.eta-row {
+  display: flex;
+  gap: 14px;
+  margin: 20px 0;
+  flex-wrap: wrap;
+}
+.eta-card {
+  flex: 1;
+  min-width: 120px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px;
+  text-align: center;
+}
+.eta-card .eta-val {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--bright);
+  margin-bottom: 4px;
+}
+.eta-card .eta-label { font-size: 11px; color: var(--text2); }
+
+/* === RESULT CALLOUT === */
+.result-box {
+  background: linear-gradient(135deg, rgba(16,185,129,0.08), rgba(6,182,212,0.06));
+  border: 1px solid rgba(16,185,129,0.3);
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin: 20px 0;
+}
+.result-box .result-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--accent4);
+  margin-bottom: 8px;
+}
+.result-box p { margin: 0; font-size: 15px; color: var(--bright); }
+
+/* === REFERENCE === */
+.ref-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 22px;
+  margin-bottom: 14px;
+}
+.ref-card .ref-num {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--accent);
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+.ref-card .ref-title { font-size: 14.5px; font-weight: 600; color: var(--bright); margin-bottom: 6px; line-height: 1.4; }
+.ref-card .ref-details { font-size: 13px; color: var(--text2); }
+.ref-card a { color: var(--accent2); text-decoration: none; }
+.ref-card a:hover { text-decoration: underline; }
+
+/* === FUTURE WORK === */
+.future-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-top: 20px;
+}
+.future-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px;
+  text-align: center;
+}
+.future-card .ficon { font-size: 24px; margin-bottom: 10px; }
+.future-card .ftitle { font-size: 13px; font-weight: 600; color: var(--bright); margin-bottom: 6px; }
+.future-card .fdesc { font-size: 12px; color: var(--text2); }
+
+/* === COMPLEXITY BADGE === */
+.complexity {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 2rem;
+  font-weight: 500;
+  color: var(--bright);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 32px;
+  margin: 16px 0;
+  letter-spacing: 0.05em;
+}
+
+/* === FORMULA PARAM TABLE === */
+.param-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 14px;
+}
+.param-table th {
+  text-align: left;
+  padding: 10px 14px;
+  background: var(--surface3);
+  color: var(--text2);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+.param-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+.param-table tr:last-child td { border-bottom: none; }
+.param-table td:first-child { font-family: var(--mono); color: var(--accent3); font-size: 13px; }
+
+/* FOOTER */
+footer {
+  margin-left: 240px;
+  border-top: 1px solid var(--border);
+  padding: 24px 64px;
+  font-size: 12.5px;
+  color: var(--text2);
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  nav { display: none; }
+  main, footer { margin-left: 0; }
+  .hero, section { padding: 40px 24px; }
+  .two-col { grid-template-columns: 1fr; }
+  .future-grid { grid-template-columns: 1fr; }
+}
+
+/* Scroll highlight */
+.highlight-section { animation: sectionPop 0.5s ease; }
+@keyframes sectionPop {
+  from { background: rgba(59,130,246,0.05); }
+  to   { background: transparent; }
+}
+
+/* Print */
+@media print {
+  nav { display: none; }
+  main, footer { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR NAV -->
+<nav>
+  <div class="nav-logo">
+    <div class="course">CSE 429 · E-JUST · Spring 2026</div>
+    <div class="title">Adaptive Bilateral Texture Filter</div>
+  </div>
+  <a href="#hero"           class="active"><span class="num">00</span> Overview</a>
+  <a href="#problem">       <span class="num">01</span> Problem Statement</a>
+  <a href="#reference">     <span class="num">02</span> Reference Paper</a>
+  <a href="#pipeline">      <span class="num">03</span> Complete Pipeline</a>
+  <a href="#gradient">      <span class="num">04</span> Gradient Map</a>
+  <a href="#structure">     <span class="num">05</span> Structure Map</a>
+  <a href="#adaptive">      <span class="num">06</span> Adaptive Scale Map</a>
+  <a href="#fourier">       <span class="num">07</span> Fourier Approximation</a>
+  <a href="#filtering">     <span class="num">08</span> Filtering Formula</a>
+  <a href="#acceleration">  <span class="num">09</span> Integral Acceleration</a>
+  <a href="#implementation"><span class="num">10</span> Implementation</a>
+  <a href="#results">       <span class="num">11</span> Results</a>
+  <a href="#timing">        <span class="num">12</span> Timing Analysis</a>
+  <a href="#conclusion">    <span class="num">13</span> Conclusion</a>
+  <a href="#references">    <span class="num">14</span> References</a>
+</nav>
+
+<!-- MAIN -->
+<main>
+
+<!-- HERO -->
+<div class="hero" id="hero">
+  <div class="hero-badge">Computer Vision Project · CSE 429</div>
+  <h1>Adaptive Bilateral<br><em>Texture Filter</em><br>for Image Smoothing</h1>
+  <p class="hero-sub">Egypt-Japan University of Science and Technology (E-JUST) · Spring 2026</p>
+
+  <div class="hero-ref">
+    Implementation and Evaluation Based on <strong>Xu et al. (2022)</strong> ·
+    <em>Frontiers in Neurorobotics</em>, Vol. 16, Article 729924
+  </div>
+
+  <div class="authors-grid">
+    <div class="author-card">
+      <div class="name">Sara Basheer Mohamed</div>
+      <div class="id">ID: 120220035</div>
+    </div>
+    <div class="author-card">
+      <div class="name">Noura Eslam Abdelsalam</div>
+      <div class="id">ID: 120210072</div>
+    </div>
+    <div class="author-card">
+      <div class="name">Wesam Elsaeed Elsayed</div>
+      <div class="id">ID: 120220290</div>
+    </div>
+    <div class="author-card">
+      <div class="name">Roaa Mostafa Ramadan</div>
+      <div class="id">ID: 120220223</div>
+    </div>
+  </div>
+
+  <div class="meta-strip">
+    <span>📅 <strong>May 9, 2026</strong></span>
+    <span>👨‍🏫 Supervisor: <strong>Dr. Ahmed Gomaa</strong></span>
+    <span>📘 Course: <strong>CSE 429 — Computer Vision & Pattern Recognition</strong></span>
+  </div>
+</div>
+
+<!-- 01 PROBLEM -->
+<section id="problem">
+  <div class="section-header">
+    <span class="section-num">01</span>
+    <h2>Problem Statement</h2>
+  </div>
+
+  <p>Traditional image smoothing filters are widely used in preprocessing pipelines, but they suffer from a fundamental limitation: they treat all image regions equally, regardless of whether a region contains meaningful structural information or fine texture.</p>
+
+  <p>The three most common filters and their drawbacks:</p>
+
+  <ul class="tech-list">
+    <li><strong>Gaussian Blur</strong> — Applies uniform weighted averaging; blurs both textures and important edges simultaneously</li>
+    <li><strong>Mean (Average) Filter</strong> — Simple neighborhood averaging; destroys fine detail and structural boundaries equally</li>
+    <li><strong>Standard Bilateral Filter</strong> — Considers both spatial and intensity similarity, but uses a fixed kernel size that cannot distinguish texture from structure</li>
+  </ul>
+
+  <div class="callout blue">
+    <div class="callout-title">Main Objective</div>
+    <p>Smooth texture regions while <strong>preserving important structural edges</strong> — by adapting the filtering kernel size based on local image structure at every pixel.</p>
+  </div>
+</section>
+
+<!-- 02 REFERENCE -->
+<section id="reference">
+  <div class="section-header">
+    <span class="section-num">02</span>
+    <h2>Reference Paper</h2>
+  </div>
+
+  <div class="ref-card">
+    <div class="ref-num">PRIMARY REFERENCE</div>
+    <div class="ref-title">Adaptive Bilateral Texture Filter for Image Smoothing</div>
+    <div class="ref-details">
+      Xu, H., Zhang, Z., Gao, Y., Liu, H., Xie, F., and Li, J. (2022)<br>
+      <em>Frontiers in Neurorobotics</em>, Volume 16, Article 729924
+    </div>
+  </div>
+
+  <p style="margin-top:20px;"><strong style="color:var(--bright)">Main Contributions of the Paper:</strong></p>
+  <ul class="tech-list">
+    <li>A novel <strong>adaptive smoothing</strong> mechanism based on per-pixel local image structure analysis</li>
+    <li><strong>Fourier series acceleration</strong> of the Gaussian range kernel, enabling fast bilateral filtering</li>
+    <li>Achieves <strong>near O(1) time complexity</strong> with respect to filter window size using integral images</li>
+  </ul>
+</section>
+
+<!-- 03 PIPELINE -->
+<section id="pipeline">
+  <div class="section-header">
+    <span class="section-num">03</span>
+    <h2>Complete Pipeline</h2>
+  </div>
+
+  <p>The implementation reproduces the full 7-stage pipeline proposed in the paper. Each stage was implemented, visualized, and evaluated independently.</p>
+
+  <div class="pipeline">
+    <div class="pipe-step">
+      <div class="step-n">STAGE 01</div>
+      <div class="step-title">Load &amp; Preprocess Image</div>
+      <div class="step-desc">Convert to grayscale / normalize input</div>
+    </div>
+    <div class="pipe-step">
+      <div class="step-n">STAGE 02</div>
+      <div class="step-title">Gradient Map</div>
+      <div class="step-desc">Detect intensity variation at each pixel</div>
+    </div>
+    <div class="pipe-step">
+      <div class="step-n">STAGE 03</div>
+      <div class="step-title">Structure Map</div>
+      <div class="step-desc">Four-directional structural analysis</div>
+    </div>
+    <div class="pipe-step">
+      <div class="step-n">STAGE 04</div>
+      <div class="step-title">Adaptive Scale Map</div>
+      <div class="step-desc">Per-pixel window size based on structure</div>
+    </div>
+    <div class="pipe-step">
+      <div class="step-n">STAGE 05</div>
+      <div class="step-title">Fourier Approximation</div>
+      <div class="step-desc">Approximate Gaussian kernel via Fourier series</div>
+    </div>
+    <div class="pipe-step">
+      <div class="step-n">STAGE 06</div>
+      <div class="step-title">Adaptive Bilateral Filter</div>
+      <div class="step-desc">Apply the filter using integral images</div>
+    </div>
+    <div class="pipe-step">
+      <div class="step-n">STAGE 07</div>
+      <div class="step-title">Evaluate Results</div>
+      <div class="step-desc">Quantitative &amp; qualitative analysis</div>
+    </div>
+  </div>
+</section>
+
+<!-- 04 GRADIENT -->
+<section id="gradient">
+  <div class="section-header">
+    <span class="section-num">04</span>
+    <h2>Stage 1 — Gradient Map</h2>
+  </div>
+
+  <p>The input image is first smoothed with a Gaussian filter to reduce noise. Then, the gradient magnitude at each pixel <em>p</em> is computed by combining the horizontal and vertical partial derivatives:</p>
+
+  <div class="math-block">
+    <div class="math-label">Gradient Magnitude</div>
+    \[ G_p = \sqrt{(\partial_x f_\sigma)^2 + (\partial_y f_\sigma)^2} \]
+  </div>
+
+  <p>where \(f_\sigma\) is the image smoothed with a Gaussian kernel of standard deviation \(\sigma\), and \(\partial_x, \partial_y\) are the partial derivatives in the horizontal and vertical directions respectively.</p>
+
+  <div class="two-col">
+    <div class="info-card high">
+      <div class="card-title">High Gradient Values → \(G_p \uparrow\)</div>
+      <div class="card-body">Indicate strong edges, boundaries between objects, and significant structural transitions in the image.</div>
+    </div>
+    <div class="info-card low">
+      <div class="card-title">Low Gradient Values → \(G_p \downarrow\)</div>
+      <div class="card-body">Indicate flat, smooth, or slowly varying regions — typically texture or uniform areas.</div>
+    </div>
+  </div>
+
+  <div class="callout cyan">
+    <div class="callout-title">Limitation of Gradient Alone</div>
+    <p>The gradient map <strong>cannot distinguish</strong> between important structural edges and fine repetitive textures — both can produce high gradient values. This motivates the Structure Map stage.</p>
+  </div>
+
+  <p><strong style="color:var(--bright)">Purpose of this stage:</strong></p>
+  <ul class="tech-list">
+    <li>Detect intensity variations across the image</li>
+    <li>Highlight edges and texture detail regions</li>
+    <li>Provide structural magnitude information as input to the next stage</li>
+  </ul>
+</section>
+
+<!-- 05 STRUCTURE -->
+<section id="structure">
+  <div class="section-header">
+    <span class="section-num">05</span>
+    <h2>Stage 2 — Four-Directional Structure Map</h2>
+  </div>
+
+  <p>To distinguish structural edges from fine textures, the algorithm analyzes four diagonal neighborhood directions around each pixel. For each direction \(j\), a weighted average of gradient values in that quadrant is computed:</p>
+
+  <div class="math-block">
+    <div class="math-label">Directional Average</div>
+    \[ A_p^{(j)} = \frac{\sum g_m(p,\, b) \cdot G_b}{\sum g_m(p,\, b)} \]
+  </div>
+
+  <p>where \(g_m(p, b)\) is a Gaussian weighting function between the center pixel \(p\) and its neighbor \(b\), and \(G_b\) is the gradient magnitude at \(b\).</p>
+
+  <p>The <strong>four directions</strong> examined are:</p>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:16px 0;">
+    <div class="info-card edge"><div class="card-title">NW — North-West</div><div class="card-body">Upper-left quadrant neighborhood</div></div>
+    <div class="info-card edge"><div class="card-title">NE — North-East</div><div class="card-body">Upper-right quadrant neighborhood</div></div>
+    <div class="info-card edge"><div class="card-title">SW — South-West</div><div class="card-body">Lower-left quadrant neighborhood</div></div>
+    <div class="info-card edge"><div class="card-title">SE — South-East</div><div class="card-body">Lower-right quadrant neighborhood</div></div>
+  </div>
+
+  <p>The final structure measure at pixel \(p\) is the <strong>maximum</strong> across all four directions:</p>
+
+  <div class="math-block">
+    <div class="math-label">Structure Measure</div>
+    \[ S_p = \max_j\, A_p^{(j)} \]
+  </div>
+
+  <div class="two-col">
+    <div class="info-card tex">
+      <div class="card-title">Small \(S_p\) → Texture Region</div>
+      <div class="card-body">All directional averages are low and similar — indicates small, repetitive, non-directional variation (fine texture).</div>
+    </div>
+    <div class="info-card high">
+      <div class="card-title">Large \(S_p\) → Structural Edge</div>
+      <div class="card-body">At least one direction has a very high gradient average — indicates a strong, directional boundary between image regions.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 06 ADAPTIVE SCALE -->
+<section id="adaptive">
+  <div class="section-header">
+    <span class="section-num">06</span>
+    <h2>Stage 3 — Adaptive Scale Map</h2>
+  </div>
+
+  <p>Using the structure map \(S_p\), the algorithm assigns an <strong>adaptive window size</strong> \(W_p\) to every pixel. The window size determines how aggressively the bilateral filter smooths at that location:</p>
+
+  <div class="math-block">
+    <div class="math-label">Adaptive Window Size</div>
+    \[ W_p = \max\left(\eta \left(\frac{1}{\lambda}\right)^{S_p^2},\; \delta\right) \]
+  </div>
+
+  <table class="param-table" style="margin-top:20px;">
+    <thead>
+      <tr><th>Parameter</th><th>Symbol</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>\(W_p\)</td><td>Adaptive kernel radius</td><td>Computed per-pixel; controls smoothing strength at location \(p\)</td></tr>
+      <tr><td>\(\eta\)</td><td>Maximum radius</td><td>Upper bound for the filter window size (tested: 8, 12, 16)</td></tr>
+      <tr><td>\(\lambda\)</td><td>Decay factor</td><td>Controls how fast the window shrinks as structure increases</td></tr>
+      <tr><td>\(\delta\)</td><td>Minimum radius</td><td>Prevents the window from collapsing to zero at strong edges</td></tr>
+      <tr><td>\(S_p\)</td><td>Structure measure</td><td>Output from Stage 2; high value = structural edge</td></tr>
+    </tbody>
+  </table>
+
+  <div class="two-col" style="margin-top:20px;">
+    <div class="callout green" style="margin:0;">
+      <div class="callout-title">Texture Regions → Large \(W_p\)</div>
+      <p>Low \(S_p\) → exponent stays high → large window → <strong>aggressive smoothing</strong> of texture</p>
+    </div>
+    <div class="callout blue" style="margin:0;">
+      <div class="callout-title">Edge Regions → Small \(W_p\)</div>
+      <p>High \(S_p\) → exponent decays fast → small window → <strong>edge preservation</strong></p>
+    </div>
+  </div>
+</section>
+
+<!-- 07 FOURIER -->
+<section id="fourier">
+  <div class="section-header">
+    <span class="section-num">07</span>
+    <h2>Stage 4 — Fourier Series Approximation</h2>
+  </div>
+
+  <p>The standard bilateral filter is computationally expensive because the range kernel must be evaluated separately for every pixel pair. To enable fast filtering, the Gaussian range kernel \(\phi(t)\) is approximated using a <strong>truncated Fourier series</strong>:</p>
+
+  <div class="math-block">
+    <div class="math-label">Fourier Approximation of Range Kernel</div>
+    \[ \hat{\phi}(t) = \sum_{n=-N}^{N} c_n\, e^{i\,n\,v\,t} \]
+  </div>
+
+  <p>where \(c_n\) are the complex Fourier coefficients, \(v\) is the fundamental frequency, \(N\) is the truncation order, and \(t = f(p) - f(b)\) is the intensity difference between pixels.</p>
+
+  <div class="callout purple">
+    <div class="callout-title">Why This Matters</div>
+    <p>This decomposition allows the bilateral filter to be expressed as a <strong>sum of inner products</strong> that can be computed using integral images — reducing the per-pixel cost from O(W²) to near O(1) regardless of window size.</p>
+  </div>
+
+  <p><strong style="color:var(--bright)">Advantages of Fourier approximation:</strong></p>
+  <ul class="tech-list">
+    <li>Dramatically reduces computational cost per pixel</li>
+    <li>Enables fast implementation via integral image acceleration</li>
+    <li>Maintains approximation accuracy with sufficient terms \(N\)</li>
+    <li>Decouples spatial and range kernel computation</li>
+  </ul>
+</section>
+
+<!-- 08 FILTERING FORMULA -->
+<section id="filtering">
+  <div class="section-header">
+    <span class="section-num">08</span>
+    <h2>Stage 5 — Adaptive Bilateral Filtering</h2>
+  </div>
+
+  <p>With the Fourier approximation in place, the final filtered output at pixel \(p\) is computed as a ratio of two integral-image-based sums:</p>
+
+  <div class="math-block">
+    <div class="math-label">Filtered Output</div>
+    \[ \hat{u}(p) = \frac{E(p)}{H(p)} \]
+  </div>
+
+  <p>where the numerator \(E(p)\) and normalizer \(H(p)\) are each computed as weighted sums over the adaptive window \(W_p\):</p>
+
+  <div class="math-block">
+    <div class="math-label">Numerator & Normalizer</div>
+    \[
+      E(p) = \sum_n c_n\, e^{-i\,n\,v\,f(p)}\, \mathbf{e}_n(p)
+      \qquad
+      H(p) = \sum_n c_n\, e^{-i\,n\,v\,f(p)}\, \mathbf{h}_n(p)
+    \]
+  </div>
+
+  <p>Here, \(\mathbf{e}_n(p)\) and \(\mathbf{h}_n(p)\) are local weighted sums that can be precomputed using <strong>integral images</strong>, making the per-pixel cost constant regardless of \(W_p\).</p>
+
+  <div class="callout cyan">
+    <div class="callout-title">Key Insight</div>
+    <p>The exponential terms in \(E(p)\) and \(H(p)\) depend only on the <strong>center pixel intensity</strong> \(f(p)\), while the integral sums \(\mathbf{e}_n\) and \(\mathbf{h}_n\) are precomputed. This is what enables the O(1) per-pixel evaluation.</p>
+  </div>
+</section>
+
+<!-- 09 ACCELERATION -->
+<section id="acceleration">
+  <div class="section-header">
+    <span class="section-num">09</span>
+    <h2>Stage 6 — Integral Image Acceleration</h2>
+  </div>
+
+  <p>The key to the algorithm's efficiency is the use of <strong>integral images</strong> (also called summed area tables). An integral image allows any rectangular region sum to be computed in exactly 4 operations, regardless of region size.</p>
+
+  <p>This enables the inner sums \(\mathbf{e}_n\) and \(\mathbf{h}_n\) from Stage 5 to be computed in constant time per pixel:</p>
+
+  <div style="text-align:center; margin: 28px 0;">
+    <div class="complexity">O(1)</div>
+    <p style="color:var(--text2); font-size:13px; margin-top:8px;">Complexity per pixel, with respect to adaptive window size</p>
+  </div>
+
+  <p><strong style="color:var(--bright)">Advantages of integral image acceleration:</strong></p>
+  <ul class="tech-list">
+    <li><strong>Constant-time window summation</strong> — any window size costs the same</li>
+    <li><strong>Significant runtime reduction</strong> vs naive implementation</li>
+    <li><strong>Enables adaptive filtering</strong> — large windows for texture, small for edges, at no extra per-pixel cost</li>
+    <li>Validated experimentally: runtime nearly constant across η = 8, 12, 16</li>
+  </ul>
+
+  <div class="callout green">
+    <div class="callout-title">Why Near O(1), Not Exact O(1)?</div>
+    <p>The algorithm has a small overhead from the Fourier summation over \(2N+1\) terms and the precomputation of integral images, making it <em>near</em> constant-time but not strictly O(1) in theory. In practice, this overhead is negligible.</p>
+  </div>
+</section>
+
+<!-- 10 IMPLEMENTATION -->
+<section id="implementation">
+  <div class="section-header">
+    <span class="section-num">10</span>
+    <h2>Implementation Details</h2>
+  </div>
+
+  <p>The full pipeline was implemented in <strong>Python</strong> using <strong>Google Colab</strong> as the development environment.</p>
+
+  <div class="tags">
+    <span class="tag py">Python 3</span>
+    <span class="tag py">Google Colab</span>
+  </div>
+
+  <p style="margin-top:20px;"><strong style="color:var(--bright)">Libraries Used:</strong></p>
+  <div class="tags">
+    <span class="tag lib">NumPy</span>
+    <span class="tag lib">OpenCV</span>
+    <span class="tag lib">SciPy</span>
+    <span class="tag lib">scikit-image</span>
+    <span class="tag lib">Matplotlib</span>
+  </div>
+
+  <p style="margin-top:24px;"><strong style="color:var(--bright)">Features Implemented:</strong></p>
+  <ul class="tech-list">
+    <li><strong>Full pipeline visualization</strong> — each stage output (gradient maps, structure maps, scale maps) rendered and saved</li>
+    <li><strong>Runtime measurements</strong> — timing collected per window size to validate O(1) complexity claim</li>
+    <li><strong>Multi-iteration filtering</strong> — supports repeated application of the filter for progressive smoothing</li>
+    <li><strong>Automatic image export</strong> — all intermediate and final results saved for quantitative evaluation</li>
+  </ul>
+
+  <p style="margin-top:20px;"><strong style="color:var(--bright)">Test Dataset:</strong></p>
+  <div class="callout blue">
+    <div class="callout-title">Kodak Lossless True Color Image Suite</div>
+    <p>Standard benchmark dataset from Eastman Kodak Company (1999), widely used in image processing literature. Provides 24 high-quality, uncompressed images in various categories.</p>
+  </div>
+</section>
+
+<!-- 11 RESULTS -->
+<section id="results">
+  <div class="section-header">
+    <span class="section-num">11</span>
+    <h2>Results &amp; Evaluation</h2>
+  </div>
+
+  <p>The implementation is evaluated through both <strong>qualitative visual analysis</strong> and <strong>quantitative metrics</strong>, benchmarked against traditional smoothing methods.</p>
+
+  <p style="margin-top:20px;"><strong style="color:var(--bright)">Qualitative Evaluation — Visual Outputs Analyzed:</strong></p>
+  <ul class="tech-list">
+    <li>Gradient maps — intensity variation across the image</li>
+    <li>Structure maps — per-pixel structural strength \(S_p\)</li>
+    <li>Adaptive scale maps — per-pixel window size \(W_p\)</li>
+    <li>Edge detection results — before and after filtering comparison</li>
+    <li>Final filtered images — visual quality assessment</li>
+  </ul>
+
+  <p style="margin-top:24px;"><strong style="color:var(--bright)">Quantitative Metrics:</strong></p>
+  <div class="metrics-grid">
+    <div class="metric-card">
+      <div class="mname">SSIM</div>
+      <div class="mdesc">Structural Similarity Index</div>
+    </div>
+    <div class="metric-card">
+      <div class="mname">PSNR</div>
+      <div class="mdesc">Peak Signal-to-Noise Ratio (dB)</div>
+    </div>
+    <div class="metric-card">
+      <div class="mname">BRISQUE</div>
+      <div class="mdesc">Blind/Referenceless Image Quality</div>
+    </div>
+    <div class="metric-card">
+      <div class="mname">FSIM</div>
+      <div class="mdesc">Feature Similarity Index</div>
+    </div>
+    <div class="metric-card">
+      <div class="mname">Runtime</div>
+      <div class="mdesc">Execution time (sec)</div>
+    </div>
+  </div>
+
+  <p style="margin-top:8px; color:var(--text2); font-size:13px;">All metrics compared against: <strong style="color:var(--text)">Gaussian Filtering</strong> and <strong style="color:var(--text)">Standard Bilateral Filtering</strong></p>
+
+  <p style="margin-top:28px;"><strong style="color:var(--bright)">Observed Filtering Results:</strong></p>
+  <ul class="tech-list">
+    <li>Texture regions successfully smoothed without structural blurring</li>
+    <li>Important structural edges clearly preserved</li>
+    <li>Reduced clutter and false positives in subsequent edge detection steps</li>
+    <li>Enhanced structural clarity compared to baseline methods</li>
+  </ul>
+
+  <p style="margin-top:16px;"><strong style="color:var(--bright)">Additional Applications Demonstrated:</strong></p>
+  <ul class="tech-list">
+    <li>Detail enhancement — amplifying edges after texture removal</li>
+    <li>Edge detection preprocessing — cleaner input for Canny/Sobel detectors</li>
+  </ul>
+</section>
+
+<!-- 12 TIMING -->
+<section id="timing">
+  <div class="section-header">
+    <span class="section-num">12</span>
+    <h2>Timing Analysis</h2>
+  </div>
+
+  <p>To experimentally validate the paper's claim of near O(1) computational complexity, runtime measurements were collected for three different adaptive maximum window sizes:</p>
+
+  <div class="eta-row">
+    <div class="eta-card">
+      <div class="eta-val">η = 8</div>
+      <div class="eta-label">Small window</div>
+    </div>
+    <div class="eta-card">
+      <div class="eta-val">η = 12</div>
+      <div class="eta-label">Medium window</div>
+    </div>
+    <div class="eta-card">
+      <div class="eta-val">η = 16</div>
+      <div class="eta-label">Large window</div>
+    </div>
+  </div>
+
+  <p><strong style="color:var(--bright)">Goal:</strong> In a naive implementation, doubling the window size would quadruple the computation time (O(W²) per pixel). The integral image acceleration should make the runtime nearly independent of window size.</p>
+
+  <div class="result-box">
+    <div class="result-label">Experimental Result</div>
+    <p>Filtering time remained <strong>nearly constant</strong> despite increasing window size from η = 8 to η = 16 — validating the near O(1) complexity claim from Xu et al. (2022).</p>
+  </div>
+</section>
+
+<!-- 13 CONCLUSION -->
+<section id="conclusion">
+  <div class="section-header">
+    <span class="section-num">13</span>
+    <h2>Conclusion</h2>
+  </div>
+
+  <p>This project successfully implemented and evaluated the Adaptive Bilateral Texture Filter proposed by Xu et al. (2022). The full 7-stage pipeline was reproduced, tested on standard benchmark images, and compared quantitatively against traditional smoothing methods.</p>
+
+  <p><strong style="color:var(--bright)">Key Achievements:</strong></p>
+  <ul class="tech-list">
+    <li>Successfully implemented the Adaptive Bilateral Texture Filter in Python</li>
+    <li>Reproduced all major stages of the reference paper pipeline</li>
+    <li>Demonstrated effective texture smoothing while preserving structural edges</li>
+    <li>Verified near constant-time runtime behavior using integral image acceleration</li>
+    <li>Evaluated using SSIM, PSNR, BRISQUE, FSIM and runtime benchmarks</li>
+  </ul>
+
+  <p style="margin-top:28px;"><strong style="color:var(--bright)">Future Improvements:</strong></p>
+
+  <div class="future-grid">
+    <div class="future-card">
+      <div class="ficon">⚡</div>
+      <div class="ftitle">GPU Acceleration</div>
+      <div class="fdesc">Parallelizing the integral image computation and Fourier summation on CUDA for real-time performance</div>
+    </div>
+    <div class="future-card">
+      <div class="ficon">🔀</div>
+      <div class="ftitle">Parallel Implementation</div>
+      <div class="fdesc">Multi-threaded CPU implementation using OpenMP or Python multiprocessing for batch processing</div>
+    </div>
+    <div class="future-card">
+      <div class="ficon">🎞️</div>
+      <div class="ftitle">Real-Time Optimization</div>
+      <div class="fdesc">Optimizing the pipeline for video processing and low-latency applications</div>
+    </div>
+  </div>
+</section>
+
+<!-- 14 REFERENCES -->
+<section id="references">
+  <div class="section-header">
+    <span class="section-num">14</span>
+    <h2>References</h2>
+  </div>
+
+  <div class="ref-card">
+    <div class="ref-num">[1] PRIMARY PAPER</div>
+    <div class="ref-title">Adaptive Bilateral Texture Filter for Image Smoothing</div>
+    <div class="ref-details">
+      Xu, H., Zhang, Z., Gao, Y., Liu, H., Xie, F., and Li, J. (2022)<br>
+      <em>Frontiers in Neurorobotics</em>, Volume 16, Article 729924<br>
+      DOI: 10.3389/fnbot.2022.729924
+    </div>
+  </div>
+
+  <div class="ref-card">
+    <div class="ref-num">[2] DATASET</div>
+    <div class="ref-title">Kodak Lossless True Color Image Suite</div>
+    <div class="ref-details">
+      Eastman Kodak Company (1999)<br>
+      Available at: <a href="https://r0k.us/graphics/kodak/" target="_blank">https://r0k.us/graphics/kodak/</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <span>CSE 429 — Computer Vision &amp; Pattern Recognition · E-JUST Spring 2026</span>
+  <span>Submitted to Dr. Ahmed Gomaa · May 9, 2026</span>
+</footer>
+
+<script>
+// Active nav link on scroll
+const sections = document.querySelectorAll('section, .hero, #hero');
+const navLinks = document.querySelectorAll('nav a');
+
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      navLinks.forEach(l => l.classList.remove('active'));
+      const id = entry.target.id;
+      const active = document.querySelector(`nav a[href="#${id}"]`);
+      if (active) active.classList.add('active');
+    }
+  });
+}, { threshold: 0.3 });
+
+document.querySelectorAll('[id]').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
